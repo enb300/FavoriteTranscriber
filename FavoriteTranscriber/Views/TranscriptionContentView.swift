@@ -28,47 +28,13 @@ struct TranscriptionContentView: View {
         VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Transcription Results")
-                                .scaledFont(.title2)
-                                .fontWeight(.semibold)
-                            
-                            Text("\(viewModel.transcriptions.count) transcription\(viewModel.transcriptions.count == 1 ? "" : "s")")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        // Compact text size control
-                        HStack(spacing: 8) {
-                            Image(systemName: "textformat.size")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            
-                            Slider(
-                                value: Binding(
-                                    get: { viewModel.textSizeMultiplier },
-                                    set: { viewModel.setTextSize($0) }
-                                ),
-                                in: 0.8...2.0,
-                                step: 0.2
-                            )
-                            .frame(width: 100)
-                            .controlSize(.mini)
-                            
-                            Text("\(Int(viewModel.textSizeMultiplier * 100))%")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .frame(width: 30)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color(NSColor.controlBackgroundColor))
-                                .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
-                        )
-                    }
+                    Text("Transcription Results")
+                        .scaledFont(.title2)
+                        .fontWeight(.semibold)
+                    
+                    Text("\(viewModel.transcriptions.count) transcription\(viewModel.transcriptions.count == 1 ? "" : "s")")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
                 
                 Spacer()
