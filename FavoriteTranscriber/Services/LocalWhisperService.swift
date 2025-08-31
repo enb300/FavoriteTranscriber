@@ -29,7 +29,7 @@ class LocalWhisperService: ObservableObject, WhisperServiceProtocol {
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         
         currentStatus = "Processing audio file..."
-        transcriptionProgress = 0.3
+        transcriptionProgress = 0.4
         
         // Run the Whisper command
         _ = try await runWhisperCommand(audioFile: audioFile, outputDir: tempDir)
@@ -212,8 +212,28 @@ struct WhisperLocalResult: Codable {
     // Computed property to estimate confidence from segments
     var confidence: Double {
         guard let segments = segments, !segments.isEmpty else { return 0.0 }
-        let totalConfidence = segments.compactMap { $0.avg_logprob }.reduce(0, +)
-        return totalConfidence / Double(segments.count)
+        let logProbs = segments.compactMap { $0.avg_logprob }
+        guard !logProbs.isEmpty else { return 0.0 }
+        
+        // Convert average log probability to confidence score
+        let avgLogProb = logProbs.reduce(0, +) / Double(logProbs.count)
+        
+        // Log probabilities are negative, typical range is -10 to 0
+        // Convert to 0-1 scale where:
+        // -0.5 or better = High confidence (0.8-1.0)
+        // -1.0 to -0.5 = Medium confidence (0.6-0.8) 
+        // -2.0 to -1.0 = Low-Medium confidence (0.4-0.6)
+        // Worse than -2.0 = Low confidence (0.0-0.4)
+        
+        if avgLogProb >= -0.5 {
+            return 0.8 + (avgLogProb + 0.5) * 0.4  // 0.8-1.0 range
+        } else if avgLogProb >= -1.0 {
+            return 0.6 + (avgLogProb + 1.0) * 0.4  // 0.6-0.8 range
+        } else if avgLogProb >= -2.0 {
+            return 0.4 + (avgLogProb + 2.0) * 0.2  // 0.4-0.6 range
+        } else {
+            return max(0.0, 0.4 + (avgLogProb + 2.0) * 0.2)  // 0.0-0.4 range
+        }
     }
 }
 

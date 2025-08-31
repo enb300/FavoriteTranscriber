@@ -458,6 +458,8 @@ struct AudioControlSidebar: View {
                 .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
         )
     }
+    
+
 
 }
 

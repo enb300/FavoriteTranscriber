@@ -10,16 +10,11 @@ struct TranscriptionContentView: View {
             headerSection
             
             // Content based on selected tab
-            TabView(selection: $selectedTab) {
-                // Current Transcription Tab
+            if selectedTab == 0 {
                 CurrentTranscriptionView(viewModel: viewModel)
-                    .tag(0)
-                
-                // Transcription History Tab
+            } else {
                 TranscriptionHistoryView(viewModel: viewModel)
-                    .tag(1)
             }
-            .tabViewStyle(DefaultTabViewStyle())
         }
         .background(Color(NSColor.textBackgroundColor))
     }

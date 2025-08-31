@@ -180,6 +180,13 @@ class TranscriptionViewModel: ObservableObject {
         saveTranscriptions()
     }
     
+    func renameTranscription(_ transcription: Transcription, newName: String) {
+        if let index = transcriptions.firstIndex(where: { $0.id == transcription.id }) {
+            transcriptions[index].customName = newName.isEmpty ? nil : newName
+            saveTranscriptions()
+        }
+    }
+    
     // MARK: - Text Size Management
     func setTextSize(_ multiplier: Double) {
         textSizeMultiplier = multiplier

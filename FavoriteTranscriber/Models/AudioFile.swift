@@ -29,7 +29,7 @@ struct AudioFile: Identifiable, Equatable {
 struct Transcription: Identifiable, Equatable, Codable {
     let id = UUID()
     let audioFileId: UUID
-    let text: String
+    var text: String
     let language: String
     let confidence: Double
     let timestamp: Date
@@ -39,6 +39,7 @@ struct Transcription: Identifiable, Equatable, Codable {
     let wordCount: Int
     let sentenceCount: Int
     let averageWordsPerSentence: Double
+    var customName: String?
     
     init(audioFileId: UUID, text: String, language: String = "en", confidence: Double = 0.0, processingTime: TimeInterval = 0.0, modelUsed: String = "unknown", serviceType: String = "Local Whisper") {
         self.audioFileId = audioFileId
