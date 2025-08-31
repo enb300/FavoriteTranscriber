@@ -125,13 +125,17 @@ struct CurrentTranscriptionView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.title2)
+                    .font(.title3)
+                    .padding(.bottom, 15)
                     .foregroundColor(.green)
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Transcription Complete")
-                        .font(.headline)
-                        .fontWeight(.semibold)
+                    InlineEditableTitle(
+                        transcription: transcription,
+                        onSave: { newName in
+                            viewModel.renameTranscription(transcription, newName: newName)
+                        }
+                    )
                     
                     Text("Generated \(formatDate(transcription.timestamp))")
                         .font(.subheadline)
@@ -139,9 +143,6 @@ struct CurrentTranscriptionView: View {
                 }
                 
                 Spacer()
-                
-                // Confidence Badge
-                confidenceBadge(transcription.confidence)
             }
             
             // Metadata Row 1
@@ -152,12 +153,17 @@ struct CurrentTranscriptionView: View {
                 metadataItem(icon: "cloud", title: "Service", value: transcription.serviceType)
             }
             
-            // Metadata Row 2
+            // Metadata Row 2 with Confidence Badge in bottom right
             HStack(spacing: 20) {
                 metadataItem(icon: "textformat.size", title: "Characters", value: "\(transcription.text.count)")
                 metadataItem(icon: "textformat", title: "Words", value: "\(transcription.wordCount)")
                 metadataItem(icon: "list.bullet", title: "Sentences", value: "\(transcription.sentenceCount)")
                 metadataItem(icon: "chart.bar", title: "Avg Words/Sentence", value: String(format: "%.1f", transcription.averageWordsPerSentence))
+                
+                Spacer()
+                
+                // Confidence Badge in actual bottom right corner
+                confidenceBadge(transcription.confidence)
             }
         }
         .padding(20)
@@ -229,7 +235,7 @@ struct CurrentTranscriptionView: View {
                 Button(action: {
                     appendToCurrentPagesDocument(transcription)
                 }) {
-                    Label("Add to Current Pages", systemImage: "doc.text")
+                    Label("Add to an Existing Pages Document", systemImage: "doc.text")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(ModernSecondaryButtonStyle())
@@ -364,12 +370,14 @@ struct CurrentTranscriptionView: View {
     private func metadataItem(icon: String, title: String, value: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: icon)
-                .font(.caption)
+                .font(.caption2)
                 .foregroundColor(.secondary)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.caption2)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .baselineOffset(2)
                     .foregroundColor(.secondary)
                 
                 Text(value)
@@ -507,6 +515,8 @@ struct CurrentTranscriptionView: View {
         // Fallback to bundle identifier
         return URL(fileURLWithPath: "/Applications/Pages.app")
     }
+    
+
 }
 
 // MARK: - History View
@@ -566,9 +576,12 @@ struct TranscriptionHistoryRow: View {
             // Header row
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(formatDate(transcription.timestamp))
-                        .font(.headline)
-                        .fontWeight(.medium)
+                    InlineEditableTitle(
+                        transcription: transcription,
+                        onSave: { newName in
+                            viewModel.renameTranscription(transcription, newName: newName)
+                        }
+                    )
                     
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 12) {
@@ -643,6 +656,94 @@ struct TranscriptionHistoryRow: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+    
+
+}
+
+// MARK: - Inline Editable Title
+struct InlineEditableTitle: View {
+    let transcription: Transcription
+    let onSave: (String) -> Void
+    
+    @State private var isEditing = false
+    @State private var editingText = ""
+    @FocusState private var isTextFieldFocused: Bool
+    
+    var body: some View {
+        HStack {
+            if isEditing {
+                // Editing mode
+                TextField("Enter name", text: $editingText)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .focused($isTextFieldFocused)
+                    .onAppear {
+                        editingText = transcription.customName ?? ""
+                        isTextFieldFocused = true
+                    }
+                    .onSubmit {
+                        saveChanges()
+                    }
+                
+                // Save button
+                Button(action: saveChanges) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.title2)
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                // Cancel button
+                Button(action: cancelEditing) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.red)
+                        .font(.title2)
+                }
+                .buttonStyle(PlainButtonStyle())
+            } else {
+                // Display mode
+                HStack(spacing: 8) {
+                    Text(transcription.displayName)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    
+                    Button(action: startEditing) {
+                        Image(systemName: "pencil.circle")
+                            .foregroundColor(.secondary)
+                            .font(.title3)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .opacity(0.7)
+                }
+                .onTapGesture {
+                    startEditing()
+                }
+            }
+        }
+    }
+    
+    private func startEditing() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isEditing = true
+        }
+    }
+    
+    private func saveChanges() {
+        let trimmedText = editingText.trimmingCharacters(in: .whitespacesAndNewlines)
+        onSave(trimmedText)
+        
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isEditing = false
+        }
+    }
+    
+    private func cancelEditing() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isEditing = false
+        }
+        editingText = ""
     }
 }
 

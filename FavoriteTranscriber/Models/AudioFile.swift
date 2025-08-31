@@ -59,5 +59,17 @@ struct Transcription: Identifiable, Equatable, Codable {
         self.sentenceCount = max(1, sentences.count)
         
         self.averageWordsPerSentence = sentenceCount > 0 ? Double(wordCount) / Double(sentenceCount) : 0.0
+        self.customName = nil
+    }
+    
+    var displayName: String {
+        return customName ?? "Transcription from \(formatTimestamp())"
+    }
+    
+    private func formatTimestamp() -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: timestamp)
     }
 }

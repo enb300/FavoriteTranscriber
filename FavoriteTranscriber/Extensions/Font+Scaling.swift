@@ -8,13 +8,13 @@ extension Font {
         case .title:
             return .system(size: 28 * multiplier, weight: .regular, design: .default)
         case .title2:
-            return .system(size: 22 * multiplier, weight: .regular, design: .default)
+            return .system(size: 24 * multiplier, weight: .regular, design: .default)
         case .title3:
-            return .system(size: 20 * multiplier, weight: .regular, design: .default)
+            return .system(size: 22 * multiplier, weight: .regular, design: .default)
         case .headline:
-            return .system(size: 17 * multiplier, weight: .semibold, design: .default)
+            return .system(size: 18 * multiplier, weight: .semibold, design: .default)
         case .body:
-            return .system(size: 17 * multiplier, weight: .regular, design: .default)
+            return .system(size: 18 * multiplier, weight: .regular, design: .default)
         case .callout:
             return .system(size: 16 * multiplier, weight: .regular, design: .default)
         case .subheadline:
@@ -22,9 +22,9 @@ extension Font {
         case .footnote:
             return .system(size: 13 * multiplier, weight: .regular, design: .default)
         case .caption:
-            return .system(size: 12 * multiplier, weight: .regular, design: .default)
+            return .system(size: 16 * multiplier, weight: .regular, design: .default)
         case .caption2:
-            return .system(size: 11 * multiplier, weight: .regular, design: .default)
+            return .system(size: 14 * multiplier, weight: .regular, design: .default)
         default:
             return .system(size: 17 * multiplier, weight: .regular, design: .default)
         }

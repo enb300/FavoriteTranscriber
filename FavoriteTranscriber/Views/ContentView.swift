@@ -26,7 +26,7 @@ struct ContentView: View {
                 helpButton
             }
         }
-        .frame(minWidth: 1200, minHeight: 800)
+        .frame(minWidth: 1200, minHeight: 1000)
         .environment(\.textSizeMultiplier, viewModel.textSizeMultiplier)
         .onAppear {
             viewModel.loadTranscriptions()
