@@ -1,18 +1,68 @@
 import Foundation
 import SwiftUI
+import Combine
+
+enum TranscriptionService: String, CaseIterable {
+    case local = "Local Whisper"
+    case openai = "OpenAI API"
+    
+    var description: String {
+        switch self {
+        case .local:
+            return "Free, runs locally, slower"
+        case .openai:
+            return "Paid, cloud-based, faster & more accurate"
+        }
+    }
+}
 
 @MainActor
 class TranscriptionViewModel: ObservableObject {
     @Published var audioService = AudioService()
-    @Published var whisperService: LocalWhisperService?
+    @Published var localWhisperService: LocalWhisperService?
+    @Published var openAIWhisperService: OpenAIWhisperService?
+    @Published var selectedService: TranscriptionService = .local
     @Published var transcriptions: [Transcription] = []
     @Published var showError = false
     @Published var errorMessage: String?
     
+    private var cancellables = Set<AnyCancellable>()
+    
+    var currentWhisperService: (any WhisperServiceProtocol)? {
+        switch selectedService {
+        case .local:
+            return localWhisperService
+        case .openai:
+            return openAIWhisperService
+        }
+    }
+    
     init() {
-        // Initialize local Whisper service (no API key needed)
-        whisperService = LocalWhisperService()
+        // Initialize both services
+        localWhisperService = LocalWhisperService()
+        openAIWhisperService = OpenAIWhisperService()
         loadTranscriptions()
+        loadSelectedService()
+        
+        // Subscribe to audioService changes to propagate to our objectWillChange
+        audioService.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        
+        // Subscribe to both whisper services
+        localWhisperService?.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+            
+        openAIWhisperService?.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Audio Recording
@@ -54,8 +104,8 @@ class TranscriptionViewModel: ObservableObject {
             return
         }
         
-        guard let whisperService = whisperService else {
-            showError(message: "Whisper service not available. Please ensure Whisper is properly installed.")
+        guard let whisperService = currentWhisperService else {
+            showError(message: "Whisper service not available. Please select a transcription service.")
             return
         }
         
@@ -69,8 +119,8 @@ class TranscriptionViewModel: ObservableObject {
     }
     
     func transcribeAudioFile(_ audioFile: AudioFile) async {
-        guard let whisperService = whisperService else {
-            showError(message: "Whisper service not available. Please ensure Whisper is properly installed.")
+        guard let whisperService = currentWhisperService else {
+            showError(message: "Whisper service not available. Please select a transcription service.")
             return
         }
         
@@ -90,15 +140,33 @@ class TranscriptionViewModel: ObservableObject {
         showError = true
     }
     
+    // MARK: - Service Selection
+    
+    func selectService(_ service: TranscriptionService) {
+        selectedService = service
+        saveSelectedService()
+    }
+    
+    private func saveSelectedService() {
+        UserDefaults.standard.set(selectedService.rawValue, forKey: "selected_transcription_service")
+    }
+    
+    private func loadSelectedService() {
+        if let savedService = UserDefaults.standard.string(forKey: "selected_transcription_service"),
+           let service = TranscriptionService(rawValue: savedService) {
+            selectedService = service
+        }
+    }
+    
     // MARK: - Data Persistence
     
-    private func saveTranscriptions() {
+    func saveTranscriptions() {
         if let encoded = try? JSONEncoder().encode(transcriptions) {
             UserDefaults.standard.set(encoded, forKey: "transcriptions")
         }
     }
     
-    private func loadTranscriptions() {
+    func loadTranscriptions() {
         if let data = UserDefaults.standard.data(forKey: "transcriptions"),
            let decoded = try? JSONDecoder().decode([Transcription].self, from: data) {
             transcriptions = decoded

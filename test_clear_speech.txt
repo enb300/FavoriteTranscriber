@@ -1,0 +1,3 @@
+Hello, my name is Alex and I am testing the favorite transcriber application.
+This audio should be clear enough for Whisper to transcribe accurately.
+Thank you for testing this application.

@@ -1,0 +1,4 @@
+start	end	text
+0	6880	Hello, my name is Alex and I am testing the favorite transcriber application.
+6880	12200	This audio should be clear enough for Whisper to transcribe accurately.
+12200	14720	Thank you for testing this application.

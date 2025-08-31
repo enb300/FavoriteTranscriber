@@ -2,13 +2,22 @@ import Foundation
 import SwiftUI
 
 @MainActor
-class LocalWhisperService: ObservableObject {
+class LocalWhisperService: ObservableObject, WhisperServiceProtocol {
     @Published var isTranscribing = false
     @Published var currentStatus = ""
     @Published var transcriptionProgress: Double = 0.0
     
-    private let whisperScriptPath = "~/whisper.py"
-    private let modelSize = "base" // Options: tiny, base, small, medium, large
+    @Published var modelSize = "small" // Options: tiny, base, small, medium, large
+    // small model provides better accuracy than base with reasonable speed
+    
+    // Model options with descriptions
+    static let availableModels = [
+        ("tiny", "Fastest, lowest accuracy (~32x realtime)"),
+        ("base", "Fast, good for quick transcription (~16x realtime)"),
+        ("small", "Balanced speed and accuracy (~6x realtime) - Recommended"),
+        ("medium", "Better accuracy, slower (~2x realtime)"),
+        ("large", "Best accuracy, slowest (~1x realtime)")
+    ]
     
     func transcribeAudioFile(_ audioFile: AudioFile) async throws -> Transcription {
         isTranscribing = true
@@ -23,7 +32,7 @@ class LocalWhisperService: ObservableObject {
         transcriptionProgress = 0.3
         
         // Run the Whisper command
-        let result = try await runWhisperCommand(audioFile: audioFile, outputDir: tempDir)
+        _ = try await runWhisperCommand(audioFile: audioFile, outputDir: tempDir)
         
         currentStatus = "Finalizing transcription..."
         transcriptionProgress = 0.9
@@ -42,21 +51,75 @@ class LocalWhisperService: ObservableObject {
     }
     
     private func runWhisperCommand(audioFile: AudioFile, outputDir: URL) async throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        // Try to find Python executable in various locations
+        let possiblePythonPaths = [
+            "/usr/bin/python3",
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            "/opt/local/bin/python3"
+        ]
         
-        // Arguments for the Whisper command
+        var pythonPath: String?
+        for path in possiblePythonPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                pythonPath = path
+                break
+            }
+        }
+        
+        guard let executablePath = pythonPath else {
+            throw LocalWhisperError.commandFailed(error: "Python3 not found. Please ensure Python 3 is installed.", output: "")
+        }
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        
+        // Arguments for the Whisper command with enhanced accuracy settings
         let args = [
-            "whisper", // The whisper command
+            "-m", "whisper", // The whisper module
             audioFile.url.path, // Input audio file
-            "--model", modelSize, // Model size
+            "--model", modelSize, // Model size (small for better accuracy)
             "--output_dir", outputDir.path, // Output directory
-            "--output_format", "txt,json,srt,vtt", // Multiple output formats
-            "--language", "en", // Language (can be auto-detected)
-            "--verbose" // Verbose output for debugging
+            "--output_format", "json", // JSON output format (most complete)
+            "--language", "en", // Language (can be auto-detected by removing this)
+            "--temperature", "0", // Lower temperature for more consistent results
+            "--best_of", "5", // Try 5 different approaches and pick the best
+            "--beam_size", "5", // Use beam search for better accuracy
+            "--word_timestamps", "True", // Get word-level timestamps
+            "--condition_on_previous_text", "True", // Use context from previous text
+            "--compression_ratio_threshold", "2.4", // Filter out low-quality segments
+            "--logprob_threshold", "-1.0", // Filter out uncertain words
+            "--no_speech_threshold", "0.6" // Better silence detection
         ]
         
         process.arguments = args
+        
+        // Set environment to help find Python modules and FFmpeg
+        var environment = ProcessInfo.processInfo.environment
+        
+        // Add Homebrew and other common paths to PATH
+        let currentPath = environment["PATH"] ?? ""
+        let additionalPaths = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin", 
+            "/usr/bin",
+            "/bin"
+        ]
+        let newPath = (additionalPaths + currentPath.split(separator: ":").map(String.init)).joined(separator: ":")
+        environment["PATH"] = newPath
+        
+        // Set Python path
+        if let pythonPath = environment["PYTHONPATH"] {
+            environment["PYTHONPATH"] = "\(pythonPath):/opt/homebrew/lib/python3.11/site-packages:/usr/local/lib/python3.11/site-packages"
+        } else {
+            environment["PYTHONPATH"] = "/opt/homebrew/lib/python3.11/site-packages:/usr/local/lib/python3.11/site-packages"
+        }
+        
+        process.environment = environment
+        
+        print("DEBUG: Using Python path: \(executablePath)")
+        print("DEBUG: Setting PATH to: \(newPath)")
+        print("DEBUG: Audio file path: \(audioFile.url.path)")
         
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -66,37 +129,47 @@ class LocalWhisperService: ObservableObject {
         currentStatus = "Running Whisper transcription..."
         transcriptionProgress = 0.5
         
-        try process.run()
-        process.waitUntilExit()
-        
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        
-        let output = String(data: outputData, encoding: .utf8) ?? ""
-        let error = String(data: errorData, encoding: .utf8) ?? ""
-        
-        if process.terminationStatus != 0 {
-            throw WhisperError.commandFailed(error: error, output: output)
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            
+            let output = String(data: outputData, encoding: .utf8) ?? ""
+            let error = String(data: errorData, encoding: .utf8) ?? ""
+            
+            print("Whisper command output: \(output)")
+            print("Whisper command error: \(error)")
+            
+            if process.terminationStatus != 0 {
+                throw LocalWhisperError.commandFailed(error: error, output: output)
+            }
+            
+            return output
+        } catch {
+            let errorDescription = error.localizedDescription
+            print("Process execution error: \(errorDescription)")
+            throw LocalWhisperError.commandFailed(error: errorDescription, output: "")
         }
-        
-        return output
     }
     
     private func parseWhisperOutput(outputDir: URL, originalAudioFile: AudioFile) async throws -> Transcription {
-        // Look for the JSON output file first (most complete)
-        let jsonFile = outputDir.appendingPathComponent("\(originalAudioFile.name).json")
+        // Look for the JSON output file (should always exist with our output format)
+        let baseFileName = originalAudioFile.url.deletingPathExtension().lastPathComponent
+        let jsonFile = outputDir.appendingPathComponent("\(baseFileName).json")
         
         if FileManager.default.fileExists(atPath: jsonFile.path) {
             return try parseJSONOutput(jsonFile: jsonFile, originalAudioFile: originalAudioFile)
         }
         
-        // Fallback to text file
-        let txtFile = outputDir.appendingPathComponent("\(originalAudioFile.name).txt")
+        // If JSON doesn't exist, check for other formats with the base filename
+        let txtFile = outputDir.appendingPathComponent("\(baseFileName).txt")
         if FileManager.default.fileExists(atPath: txtFile.path) {
             return try parseTextOutput(txtFile: txtFile, originalAudioFile: originalAudioFile)
         }
         
-        throw WhisperError.noOutputFilesFound
+        throw LocalWhisperError.noOutputFilesFound
     }
     
     private func parseJSONOutput(jsonFile: URL, originalAudioFile: AudioFile) throws -> Transcription {
@@ -104,22 +177,13 @@ class LocalWhisperService: ObservableObject {
         let whisperResult = try JSONDecoder().decode(WhisperLocalResult.self, from: jsonData)
         
         return Transcription(
-            id: UUID(),
-            audioFileName: originalAudioFile.name,
-            audioFileSize: originalAudioFile.fileSize,
-            audioDuration: originalAudioFile.duration,
-            transcriptionText: whisperResult.text,
+            audioFileId: originalAudioFile.id,
+            text: whisperResult.text,
             language: whisperResult.language,
             confidence: whisperResult.confidence,
-            timestamp: Date(),
-            segments: whisperResult.segments.map { segment in
-                TranscriptionSegment(
-                    start: segment.start,
-                    end: segment.end,
-                    text: segment.text,
-                    confidence: segment.confidence
-                )
-            }
+            processingTime: 0.0, // We could calculate this if needed
+            modelUsed: modelSize,
+            serviceType: "Local Whisper"
         )
     }
     
@@ -127,15 +191,13 @@ class LocalWhisperService: ObservableObject {
         let text = try String(contentsOf: txtFile, encoding: .utf8)
         
         return Transcription(
-            id: UUID(),
-            audioFileName: originalAudioFile.name,
-            audioFileSize: originalAudioFile.fileSize,
-            audioDuration: originalAudioFile.duration,
-            transcriptionText: text,
+            audioFileId: originalAudioFile.id,
+            text: text,
             language: "en", // Default assumption
             confidence: 0.0, // Unknown for text output
-            timestamp: Date(),
-            segments: []
+            processingTime: 0.0,
+            modelUsed: modelSize,
+            serviceType: "Local Whisper"
         )
     }
 }
@@ -145,18 +207,24 @@ class LocalWhisperService: ObservableObject {
 struct WhisperLocalResult: Codable {
     let text: String
     let language: String
-    let confidence: Double
-    let segments: [WhisperLocalSegment]
+    let segments: [WhisperSegment]?
+    
+    // Computed property to estimate confidence from segments
+    var confidence: Double {
+        guard let segments = segments, !segments.isEmpty else { return 0.0 }
+        let totalConfidence = segments.compactMap { $0.avg_logprob }.reduce(0, +)
+        return totalConfidence / Double(segments.count)
+    }
 }
 
-struct WhisperLocalSegment: Codable {
+struct WhisperSegment: Codable {
     let start: Double
     let end: Double
     let text: String
-    let confidence: Double
+    let avg_logprob: Double?
 }
 
-enum WhisperError: LocalizedError {
+enum LocalWhisperError: LocalizedError {
     case commandFailed(error: String, output: String)
     case noOutputFilesFound
     case modelNotFound

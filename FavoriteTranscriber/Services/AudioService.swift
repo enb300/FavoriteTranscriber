@@ -102,12 +102,17 @@ class AudioService: NSObject, ObservableObject {
             recordingStartTime = Date()
             startRecordingTimer()
             
-            currentAudioFile = AudioFile(url: audioFilename)
+            // Don't set currentAudioFile yet - wait until recording is complete
             permissionStatus = "Recording started"
             print("Recording started successfully")
+            
+            // Force UI update for recording state
+            objectWillChange.send()
         } catch {
+            isRecording = false
             permissionStatus = "Recording failed: \(error.localizedDescription)"
             print("Failed to start recording: \(error)")
+            objectWillChange.send()
         }
     }
     
@@ -126,11 +131,21 @@ class AudioService: NSObject, ObservableObject {
         isRecording = false
         stopRecordingTimer()
         
-        if let audioFile = currentAudioFile {
+        // Get the recording URL from the recorder
+        if let recorder = audioRecorder {
+            let url = recorder.url
+            let audioFile = AudioFile(url: url)
             processAudioFile(audioFile)
         }
+        
         permissionStatus = "Recording stopped"
         print("Recording stopped")
+        
+        // Reset recording time
+        recordingTime = 0
+        
+        // Force UI update for recording state
+        objectWillChange.send()
     }
     
     private func startRecordingTimer() {
@@ -149,20 +164,38 @@ class AudioService: NSObject, ObservableObject {
     }
     
     private func processAudioFile(_ audioFile: AudioFile) {
-        let asset = AVURLAsset(url: audioFile.url)
-        Task {
-            do {
-                let duration = try await asset.load(.duration).seconds
-                let fileSize = (try? FileManager.default.attributesOfItem(atPath: audioFile.url.path)[.size] as? Int64) ?? 0
-                let processedAudioFile = AudioFile(url: audioFile.url, duration: duration, fileSize: fileSize, format: audioFile.format)
-                await MainActor.run {
-                    currentAudioFile = processedAudioFile
-                    print("Audio file processed: \(processedAudioFile.name), duration: \(duration)s, size: \(fileSize) bytes")
-                }
-            } catch {
-                print("Failed to load audio duration: \(error)")
-                await MainActor.run {
-                    currentAudioFile = audioFile // Still set the audio file even if we can't get duration
+        // Ensure we're on the main actor for UI updates
+        Task { @MainActor in
+            // Set the audio file immediately so UI updates
+            currentAudioFile = audioFile
+            print("Audio file imported: \(audioFile.name)")
+            print("DEBUG: currentAudioFile set to: \(audioFile.name)")
+            
+            // Force a UI update by triggering objectWillChange
+            objectWillChange.send()
+            
+            // Then process it asynchronously to get duration and size
+            let asset = AVURLAsset(url: audioFile.url)
+            Task {
+                do {
+                    let duration = try await asset.load(.duration).seconds
+                    let fileSize = (try? FileManager.default.attributesOfItem(atPath: audioFile.url.path)[.size] as? Int64) ?? 0
+                    let processedAudioFile = AudioFile(url: audioFile.url, duration: duration, fileSize: fileSize, format: audioFile.format)
+                    await MainActor.run {
+                        currentAudioFile = processedAudioFile
+                        print("Audio file processed: \(processedAudioFile.name), duration: \(duration)s, size: \(fileSize) bytes")
+                        print("DEBUG: currentAudioFile updated to processed version: \(processedAudioFile.name)")
+                        // Force another UI update
+                        objectWillChange.send()
+                    }
+                } catch {
+                    print("Failed to load audio duration: \(error)")
+                    await MainActor.run {
+                        // Keep the original audio file if processing fails
+                        currentAudioFile = audioFile
+                        print("DEBUG: currentAudioFile kept as original due to processing error: \(audioFile.name)")
+                        objectWillChange.send()
+                    }
                 }
             }
         }
@@ -171,7 +204,6 @@ class AudioService: NSObject, ObservableObject {
     func importAudioFile(from url: URL) {
         let audioFile = AudioFile(url: url)
         processAudioFile(audioFile)
-        print("Audio file imported: \(audioFile.name)")
     }
 }
 
