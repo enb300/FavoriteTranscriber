@@ -25,6 +25,7 @@ class TranscriptionViewModel: ObservableObject {
     @Published var transcriptions: [Transcription] = []
     @Published var showError = false
     @Published var errorMessage: String?
+    @Published var textSizeMultiplier: Double = 1.0
     
     private var cancellables = Set<AnyCancellable>()
     
@@ -43,6 +44,7 @@ class TranscriptionViewModel: ObservableObject {
         openAIWhisperService = OpenAIWhisperService()
         loadTranscriptions()
         loadSelectedService()
+        loadTextSize()
         
         // Subscribe to audioService changes to propagate to our objectWillChange
         audioService.objectWillChange
@@ -176,5 +178,19 @@ class TranscriptionViewModel: ObservableObject {
     func deleteTranscription(_ transcription: Transcription) {
         transcriptions.removeAll { $0.id == transcription.id }
         saveTranscriptions()
+    }
+    
+    // MARK: - Text Size Management
+    func setTextSize(_ multiplier: Double) {
+        textSizeMultiplier = multiplier
+        saveTextSize()
+    }
+    
+    private func saveTextSize() {
+        UserDefaults.standard.set(textSizeMultiplier, forKey: "textSizeMultiplier")
+    }
+    
+    private func loadTextSize() {
+        textSizeMultiplier = UserDefaults.standard.object(forKey: "textSizeMultiplier") as? Double ?? 1.0
     }
 }

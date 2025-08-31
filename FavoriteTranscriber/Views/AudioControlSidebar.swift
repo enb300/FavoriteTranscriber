@@ -41,12 +41,12 @@ struct AudioControlSidebar: View {
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Audio Controls")
-                        .font(.title2)
+                        .scaledFont(.title2)
                         .fontWeight(.semibold)
                         .foregroundColor(.primary)
                     
                     Text("Record or import audio for transcription")
-                        .font(.subheadline)
+                        .scaledFont(.subheadline)
                         .foregroundColor(.secondary)
                 }
             }
@@ -458,6 +458,7 @@ struct AudioControlSidebar: View {
                 .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
         )
     }
+
 }
 
 // MARK: - Custom Button Style

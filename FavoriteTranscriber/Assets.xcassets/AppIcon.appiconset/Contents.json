@@ -49,13 +49,13 @@
       "size" : "256x256"
     },
     {
-      "filename" : "icon_256x256@2x 1.png",
+      "filename" : "icon_512x512.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "512x512"
     },
     {
-      "filename" : "AppIcon-iOS-Default-1024x1024@1x.png",
+      "filename" : "icon_512x512@2x.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "512x512"

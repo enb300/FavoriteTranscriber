@@ -2,14 +2,24 @@ import SwiftUI
 
 struct TranscriptionContentView: View {
     @ObservedObject var viewModel: TranscriptionViewModel
+    @State private var selectedTab = 0
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
+            // Header with clean tab navigation
             headerSection
             
-            // Content - just show current transcription
-            CurrentTranscriptionView(viewModel: viewModel)
+            // Content based on selected tab
+            TabView(selection: $selectedTab) {
+                // Current Transcription Tab
+                CurrentTranscriptionView(viewModel: viewModel)
+                    .tag(0)
+                
+                // Transcription History Tab
+                TranscriptionHistoryView(viewModel: viewModel)
+                    .tag(1)
+            }
+            .tabViewStyle(DefaultTabViewStyle())
         }
         .background(Color(NSColor.textBackgroundColor))
     }
@@ -18,16 +28,91 @@ struct TranscriptionContentView: View {
         VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Transcription Results")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    
-                    Text("\(viewModel.transcriptions.count) transcription\(viewModel.transcriptions.count == 1 ? "" : "s")")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Transcription Results")
+                                .scaledFont(.title2)
+                                .fontWeight(.semibold)
+                            
+                            Text("\(viewModel.transcriptions.count) transcription\(viewModel.transcriptions.count == 1 ? "" : "s")")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        // Compact text size control
+                        HStack(spacing: 8) {
+                            Image(systemName: "textformat.size")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Slider(
+                                value: Binding(
+                                    get: { viewModel.textSizeMultiplier },
+                                    set: { viewModel.setTextSize($0) }
+                                ),
+                                in: 0.8...2.0,
+                                step: 0.2
+                            )
+                            .frame(width: 100)
+                            .controlSize(.mini)
+                            
+                            Text("\(Int(viewModel.textSizeMultiplier * 100))%")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .frame(width: 30)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color(NSColor.controlBackgroundColor))
+                                .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
+                        )
+                    }
                 }
                 
                 Spacer()
+                
+                // Clean tab navigation
+                HStack(spacing: 0) {
+                    Button(action: { selectedTab = 0 }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "doc.text")
+                            Text("Current")
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(selectedTab == 0 ? .white : .primary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(selectedTab == 0 ? Color.accentColor : Color.clear)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    Button(action: { selectedTab = 1 }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock.arrow.circlepath")
+                            Text("History")
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(selectedTab == 1 ? .white : .primary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(selectedTab == 1 ? Color.accentColor : Color.clear)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding(2)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(NSColor.controlBackgroundColor))
+                        .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+                )
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
@@ -148,7 +233,7 @@ struct CurrentTranscriptionView: View {
             
             ScrollView {
                 Text(transcription.text)
-                    .font(.body)
+                    .scaledFont(.body)
                     .lineSpacing(4)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -316,7 +401,7 @@ struct CurrentTranscriptionView: View {
     }
     
     private func metadataItem(icon: String, title: String, value: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .top, spacing: 6) {
             Image(systemName: icon)
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -354,7 +439,7 @@ struct CurrentTranscriptionView: View {
     }
     
     private func openInNewPagesDocument(_ transcription: Transcription) {
-        let content = createDetailedTranscriptionText(transcription)
+        let content = transcription.text
         
         // Create a temporary file with the content
         let tempURL = FileManager.default.temporaryDirectory
@@ -380,7 +465,7 @@ struct CurrentTranscriptionView: View {
     
     private func appendToCurrentPagesDocument(_ transcription: Transcription) {
         // Copy transcription text to clipboard
-        let content = createDetailedTranscriptionText(transcription)
+        let content = transcription.text
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(content, forType: .string)
         
@@ -439,22 +524,6 @@ struct CurrentTranscriptionView: View {
         return """
         {\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times New Roman;}}
         \\f0\\fs24 
-        {\\b Transcription Export}\\par
-        \\par
-        {\\b Generated:} \(formatDate(transcription.timestamp))\\par
-        \\par
-        {\\b Statistics:}\\par
-        • Language: \(transcription.language.uppercased())\\par
-        • Service: \(transcription.serviceType)\\par
-        • Model: \(transcription.modelUsed)\\par
-        • Confidence: \(String(format: "%.1f%%", transcription.confidence * 100))\\par
-        • Processing Time: \(String(format: "%.1fs", transcription.processingTime))\\par
-        • Characters: \(transcription.text.count)\\par
-        • Words: \(transcription.wordCount)\\par
-        • Sentences: \(transcription.sentenceCount)\\par
-        • Average Words per Sentence: \(String(format: "%.1f", transcription.averageWordsPerSentence))\\par
-        \\par
-        {\\b Content:}\\par
         \(transcription.text.replacingOccurrences(of: "\n", with: "\\par "))\\par
         }
         """
@@ -576,7 +645,7 @@ struct TranscriptionHistoryRow: View {
             
             // Preview text (always visible)
             Text(transcription.text)
-                .font(.body)
+                .scaledFont(.body)
                 .lineLimit(isExpanded ? nil : 2)
                 .textSelection(.enabled)
             
